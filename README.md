@@ -17,17 +17,15 @@ If the script completed without errors, you are ready to go. If there is an erro
 script as many times as you want. This will not affect the installation, unless you have customized it.
 
 Requirements:
-- Ubuntu 18.05 LTS installation
+- Must be run from a MAAS region system (check farm layout guide!)
+- Must have an accessable APT mirror and Docker registry, with required contents (check farm layout guide!)
+- Ubuntu 18.05 LTS installation on target
 - Networking configured with an reachable IP
 - Enabled SSH for remote access
 - Internet access must be available
 - A user (non-Root) with full sudo permissions
 - Hardware that supports SGX, this script does NOT support software mode
 - Each CPU core must be met with 2GB of system memory (if 4 CPU then 8 GB of RAM is needed)
-
-inside vars/main.yml
-- select a driver (legacy or dcap)
-- select a run method (docker or systemd)
 
 Running remotely:
 
@@ -44,12 +42,3 @@ ansible_python_interpreter=/usr/bin/python3
 ```
 
 ansible-playbook -i hosts install.yml
-
-TODO:
-- Make docker install default=true
-  - Add variable for docker user/key
-  - install docker containers
-- Make systemd install default=false
-  - add versions for node, runtime and host
-  - combined with systemd and configs
-
