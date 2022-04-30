@@ -1,0 +1,42 @@
+---
+    - name: "Update repository caches"
+      apt:
+        update_cache=yes
+        force_apt_get=yes
+        cache_valid_time=3600
+
+    - name: "Update all packages"
+      apt:
+        upgrade=dist
+        force_apt_get=yes
+
+    - name: "Install required tools and packages"
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - gnupg2
+          - pass
+        state: latest
+        update_cache: yes
+
+    - name: Copy docker daemon json
+      template:
+        src: daemon.json.j2
+        dst: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: 0644
+        backup: no
+
+    - name: restart docker service
+      service:
+        name: docker
+        state: restarted
+      when: docker_config.changed
+
+    - name: enable docker at boot
+      service:
+        name: docker
+        enabled: yes
+

@@ -1,0 +1,187 @@
+---
+    - name: Disable unattended updates
+      systemd:
+        name: unattended-upgrades
+        state: stopped
+        enabled: no
+
+    - name: Disable unattended APT updates
+      systemd:
+        name: apt-daily-upgrade.timer
+        state: stopped
+        enabled: no
+
+    - name: "Update repository caches"
+      apt: 
+        update_cache=yes 
+        force_apt_get=yes 
+        cache_valid_time=3600
+
+    - name: "Update all packages"
+      apt:
+        upgrade=dist
+        force_apt_get=yes
+
+    - name: "Install required tools and packages"
+      apt:
+        name:
+          - build-essential
+          - ocaml
+          - ocamlbuild
+          - automake
+          - autoconf
+          - libtool
+          - wget
+          - python
+          - libssl-dev
+          - libcurl4-openssl-dev
+          - protobuf-compiler
+          - libprotobuf-dev
+          - sudo
+          - kmod
+          - vim
+          - curl
+          - git-core
+          - libprotobuf-c0-dev
+          - libboost-thread-dev
+          - libboost-system-dev
+          - liblog4cpp5-dev
+          - libjsoncpp-dev
+          - alien
+          - uuid-dev
+          - libxml2-dev
+          - cmake
+          - pkg-config
+          - expect
+          - systemd-sysv
+          - gdb
+          - jq
+          - zip
+          - unzip
+          - python-pexpect
+          - python3-pexpect
+          - dkms
+          - cpufrequtils
+          - lldpd
+          - gpm
+          - ethtool
+        state: latest
+        update_cache: yes
+
+    - name: Check if a reboot is needed 
+      register: reboot_required_file
+      stat: path=/var/run/reboot-required get_md5=no
+
+    - name: Reboot server if required for updates
+      reboot:
+        msg: "Reboot initiated by Ansible due to kernel updates"
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: uptime
+      when: reboot_required_file.stat.exists
+
+    - name: update cpufrequtils configuration file
+      template:
+        src: etc/default/cpufrequtils.j2
+        dest: /etc/default/cpufrequtils
+
+    - name: enable cpufrequtils
+      service:
+        name: cpufrequtils
+        enabled: yes
+
+    - name: check if cpufreq kernel module is enabled
+      stat:
+        path: /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+      register: sysfs_file
+
+    - name: check current governor
+      command: /bin/cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+      register: current_governor
+      when: sysfs_file.stat.exists
+
+    - name: disable ondemand service
+      service:
+        name: ondemand
+        state: stopped
+        enabled: no
+
+    - name: bounce service if necessary
+      service:
+        name: cpufrequtils
+        state: restarted
+      when:
+        - sysfs_file.stat.exists
+        - current_governor.stdout != cpufreq_governor 
+
+    - name: Create systemd service for Wake-on-LAN persistance
+      template:
+        src: etc/systemd/system/wol.service.j2
+        dest: /etc/systemd/system/wol.service
+        mode: 0664
+
+    - name: Start Wake-on-LAN persistance
+      systemd:
+        name: "wol.service"
+        state: restarted
+        daemon_reload: yes
+
+    - name: Enable Wake-on-LAN persistance at boot
+      systemd:
+        name: "wol.service"
+        enabled: True
+
+#    - name: Enable Wake-on-LAN in Netplan.io
+#      lineinfile:
+#        path: /etc/netplan/50-cloud-init.yaml
+#        insertafter: "eno1:"
+#        line: '            wakeonlan: true'
+#
+#    - name: Enable Wake-on-LAN in Netplan.io
+#      lineinfile:
+#        path: /etc/netplan/50-cloud-init.yaml
+#        insertafter: "eno1:"
+#        line: '            emit-lldp: true'
+
+    - name: "Check if GRUB is installed"
+      stat:
+        path: /etc/default/grub
+      changed_when: false
+      check_mode: no
+      register: grubinstalled
+
+    - name: Update GRUB_TIMEOUT
+      lineinfile:
+        dest: /etc/default/grub
+        line: "GRUB_TIMEOUT=3"
+        regexp: '^GRUB_TIMEOUT.*$'
+        state: present
+      when:
+        grubinstalled.stat.exists
+
+    - name: Update GRUB_RECORDFAIL_TIMEOUT
+      lineinfile:
+        dest: /etc/default/grub
+        line: "GRUB_RECORDFAIL_TIMEOUT=3"
+        regexp: '^GRUB_RECORDFAIL_TIMEOUT.*$'
+        state: present
+      when:
+        grubinstalled.stat.exists
+
+    - name: Update EFI with new GRUB values
+      command: "/usr/sbin/update-grub2"
+
+    - name: Fix EFI missing default for default boot option
+      copy:
+        src: /boot/efi/EFI/ubuntu//{{ item }}
+        dest: /boot/efi/EFI/BOOT/{{ item }}
+        remote_src: yes
+      with_items:
+        - BOOTX64.CSV
+        - grub.cfg
+        - grubx64.efi
+        - mmx64.efi
+        - shimx64.efi
+

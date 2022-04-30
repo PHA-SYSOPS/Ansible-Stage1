@@ -1,0 +1,3 @@
+---
+cpufreq_enable: True
+cpufreq_governor: "performance"
